@@ -7,6 +7,8 @@ import { LensAgentClient } from "@ai16z/client-lens";
 import { SlackClientInterface } from "@ai16z/client-slack";
 import { TelegramClientInterface } from "@ai16z/client-telegram";
 import { TwitterClientInterface } from "@ai16z/client-twitter";
+import { FarcasterAgentClient } from "@ai16z/client-farcaster";
+import { spawnAgentAction } from "../custom_actions/spawn_agent_action";
 import {
     AgentRuntime,
     CacheManager,
@@ -20,6 +22,7 @@ import {
     ICacheManager,
     IDatabaseAdapter,
     IDatabaseCacheAdapter,
+    Memory,
     ModelProviderName,
     settings,
     stringToUuid,
@@ -551,7 +554,7 @@ export async function createAgent(
             getSecret(character, "STORY_PRIVATE_KEY") ? storyPlugin : null,
         ].filter(Boolean),
         providers: [],
-        actions: [],
+        actions: [spawnAgentAction],
         services: [],
         managers: [],
         cacheManager: cache,
@@ -571,10 +574,7 @@ function initializeDbCache(character: Character, db: IDatabaseCacheAdapter) {
     return cache;
 }
 
-async function startAgent(
-    character: Character,
-    directClient
-): Promise<AgentRuntime> {
+async function startAgent(character: Character, directClient) {
     let db: IDatabaseAdapter & IDatabaseCacheAdapter;
     try {
         character.id ??= stringToUuid(character.name);
@@ -587,9 +587,7 @@ async function startAgent(
             fs.mkdirSync(dataDir, { recursive: true });
         }
 
-        db = initializeDatabase(dataDir) as IDatabaseAdapter &
-            IDatabaseCacheAdapter;
-
+        db = initializeDatabase(dataDir) as IDatabaseAdapter & IDatabaseCacheAdapter;
         await db.init();
 
         const cache = initializeDbCache(character, db);
@@ -609,10 +607,15 @@ async function startAgent(
         // add to container
         directClient.registerAgent(runtime);
 
-        // report to console
-        elizaLogger.debug(`Started ${character.name} as ${runtime.agentId}`);
+        // Check for autonomous operation using existing settings structure
+        const autonomousManager = new AutonomousAgentManager(runtime);
+        // Default to 60 minutes if not specified in settings
+        const interval = 60;
+        autonomousManager.start(interval).catch(error => {
+            elizaLogger.error("Error in autonomous manager:", error);
+        });
 
-        return runtime;
+        return clients;
     } catch (error) {
         elizaLogger.error(
             `Error starting agent for character ${character.name}:`,
@@ -662,3 +665,47 @@ startAgents().catch((error) => {
     elizaLogger.error("Unhandled error in startAgents:", error);
     process.exit(1); // Exit the process after logging
 });
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+});
+
+async function handleUserInput(input, agentId) {
+    if (input.toLowerCase() === "exit") {
+        gracefulExit();
+    }
+
+    try {
+        const serverPort = parseInt(settings.SERVER_PORT || "3000");
+
+        const response = await fetch(
+            `http://localhost:${serverPort}/${agentId}/message`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text: input,
+                    userId: "user",
+                    userName: "User",
+                }),
+            }
+        );
+
+        const data = await response.json();
+        data.forEach((message) =>
+            elizaLogger.log(`${"Agent"}: ${message.text}`)
+        );
+    } catch (error) {
+        console.error("Error fetching response:", error);
+    }
+}
+
+async function gracefulExit() {
+    elizaLogger.log("Terminating and cleaning up resources...");
+    rl.close();
+    process.exit(0);
+}
+
+rl.on("SIGINT", gracefulExit);
+rl.on("SIGTERM", gracefulExit);
