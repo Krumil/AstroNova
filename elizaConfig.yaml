@@ -1,0 +1,3 @@
+actions:
+  - name: spawn_agent
+    path: ./agent/custom_actions/spawn_agent_action.ts

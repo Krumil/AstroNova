@@ -2,13 +2,13 @@ import { PostgresDatabaseAdapter } from "@ai16z/adapter-postgres";
 import { SqliteDatabaseAdapter } from "@ai16z/adapter-sqlite";
 import { AutoClientInterface } from "@ai16z/client-auto";
 import { DiscordClientInterface } from "@ai16z/client-discord";
-import { FarcasterAgentClient } from "@ai16z/client-farcaster";
 import { LensAgentClient } from "@ai16z/client-lens";
 import { SlackClientInterface } from "@ai16z/client-slack";
 import { TelegramClientInterface } from "@ai16z/client-telegram";
 import { TwitterClientInterface } from "@ai16z/client-twitter";
 import { FarcasterAgentClient } from "@ai16z/client-farcaster";
-import { spawnAgentAction } from "../custom_actions/spawn_agent_action";
+import { FactionClientInterface } from "@ai16z/client-faction";
+
 import {
     AgentRuntime,
     CacheManager,
@@ -61,6 +61,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import yargs from "yargs";
+import readline from 'readline';
 
 const __filename = fileURLToPath(import.meta.url); // get the resolved path to the file
 const __dirname = path.dirname(__filename); // get the name of the directory
@@ -554,7 +555,6 @@ export async function createAgent(
             getSecret(character, "STORY_PRIVATE_KEY") ? storyPlugin : null,
         ].filter(Boolean),
         providers: [],
-        actions: [spawnAgentAction],
         services: [],
         managers: [],
         cacheManager: cache,
@@ -607,15 +607,15 @@ async function startAgent(character: Character, directClient) {
         // add to container
         directClient.registerAgent(runtime);
 
-        // Check for autonomous operation using existing settings structure
-        const autonomousManager = new AutonomousAgentManager(runtime);
-        // Default to 60 minutes if not specified in settings
-        const interval = 60;
-        autonomousManager.start(interval).catch(error => {
+        const autonomousPrompt = "Create two agent, one for traditionalists and one for innovators.";
+        const autonomousInterval = 1;
+
+        const autonomousManager = new AutonomousAgentManager(runtime, autonomousPrompt, autonomousInterval);
+        autonomousManager.start().catch(error => {
             elizaLogger.error("Error in autonomous manager:", error);
         });
 
-        return clients;
+        return runtime;
     } catch (error) {
         elizaLogger.error(
             `Error starting agent for character ${character.name}:`,

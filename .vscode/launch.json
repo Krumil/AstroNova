@@ -8,14 +8,19 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/src/index.ts",
             "runtimeArgs": [
                 "-r",
-                "ts-node/register"
+                "ts-node/register/esm"
             ],
+            "args": [
+                "src/index.ts"
+            ],
+            "cwd": "${workspaceFolder}",
             "env": {
                 "DEBUG": "eliza:*"
-            }
+            },
+            "console": "integratedTerminal",
+            "sourceMaps": true
         }
     ]
 }
